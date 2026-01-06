@@ -1,9 +1,8 @@
 #include "playground.h"
-
-// Include standard headers
 #include <stdio.h>
 #include <stdlib.h>
 #include <vector>
+#include <iostream>
 
 // Include GLFW
 #include <glfw3.h>
@@ -11,144 +10,232 @@ GLFWwindow* window;
 
 // Include GLM
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 using namespace glm;
 
 #include <common/shader.hpp>
 
-int main( void )
+//Globals
+
+GLuint MatrixID, ModelMatrixID, ViewMatrixID;
+GLuint TimeID, AmpID, FreqID, SpeedID, LightToggleID, ColorToggleID;
+
+//Wave Parameters
+float waveAmplitude = 0.5f;
+float waveFrequency = 1.0f;
+float waveSpeed = 2.0f;
+int toggleLighting = 1; // 1 = On, 0 = Off
+int toggleColor = 1;    // 1 = Height Color, 0 = Solid
+
+//Grid settings
+const int GRID_SIZE = 40; // 40x40 grid
+const float GRID_SPACING = 0.5f;
+
+int vertexCount = 0;
+
+int main(void)
 {
-  //Initialize window
-  bool windowInitialized = initializeWindow();
-  if (!windowInitialized) return -1;
+    // Initialize window
+    bool windowInitialized = initializeWindow();
+    if (!windowInitialized) return -1;
 
-  //Initialize vertex buffer
-  bool vertexbufferInitialized = initializeVertexbuffer();
-  if (!vertexbufferInitialized) return -1;
+    // Enable Depth Test (Crucial for 3D waves)
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LESS);
 
-  // Create and compile our GLSL program from the shaders
-  programID = LoadShaders("SimpleVertexShader.vertexshader", "SimpleFragmentShader.fragmentshader");
+    // Initialize vertex buffer (Now generates a grid)
+    bool vertexbufferInitialized = initializeVertexbuffer();
+    if (!vertexbufferInitialized) return -1;
 
-	//start animation loop until escape key is pressed
-	do{
+    // Create and compile our GLSL program from the shaders
+    programID = LoadShaders("SimpleVertexShader.vertexshader", "SimpleFragmentShader.fragmentshader");
 
-    updateAnimationLoop();
+    // Get a handle for our "Uniform" variables in the shader
+    MatrixID = glGetUniformLocation(programID, "MVP");
+    ModelMatrixID = glGetUniformLocation(programID, "M");
+    ViewMatrixID = glGetUniformLocation(programID, "V");
+    TimeID = glGetUniformLocation(programID, "time");
 
-	} // Check if the ESC key was pressed or the window was closed
-	while( glfwGetKey(window, GLFW_KEY_ESCAPE ) != GLFW_PRESS &&
-		   glfwWindowShouldClose(window) == 0 );
+    // Control Uniforms
+    AmpID = glGetUniformLocation(programID, "u_amplitude");
+    FreqID = glGetUniformLocation(programID, "u_frequency");
+    SpeedID = glGetUniformLocation(programID, "u_speed");
+    LightToggleID = glGetUniformLocation(programID, "u_toggleLighting");
+    ColorToggleID = glGetUniformLocation(programID, "u_toggleColor");
 
-	
-  //Cleanup and close window
-  cleanupVertexbuffer();
-  glDeleteProgram(programID);
-	closeWindow();
-  
-	return 0;
+    // Start animation loop
+    do {
+        updateAnimationLoop();
+    } while (glfwGetKey(window, GLFW_KEY_ESCAPE) != GLFW_PRESS &&
+        glfwWindowShouldClose(window) == 0);
+
+    cleanupVertexbuffer();
+    glDeleteProgram(programID);
+    closeWindow();
+
+    return 0;
 }
 
 void updateAnimationLoop()
 {
-  // Clear the screen
-  glClear(GL_COLOR_BUFFER_BIT);
+    // Clear the screen and Depth buffer
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-  // Use our shader
-  glUseProgram(programID);
+    glUseProgram(programID);
 
-  // 1rst attribute buffer : vertices
-  glEnableVertexAttribArray(0);
-  glBindBuffer(GL_ARRAY_BUFFER, vertexbuffer);
-  glVertexAttribPointer(
-    0,                  // attribute 0. No particular reason for 0, but must match the layout in the shader.
-    3,  // size
-    GL_FLOAT,           // type
-    GL_FALSE,           // normalized?
-    0,                  // stride
-    (void*)0            // array buffer offset
-  );
+    // Controls
+    // Amplitude: Up/Down Arrows
+    if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS) waveAmplitude += 0.01f;
+    if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS) waveAmplitude -= 0.01f;
 
-  // Draw the triangle !
-  glDrawArrays(GL_TRIANGLES, 0, vertexbuffer_size); // 3 indices starting at 0 -> 1 triangle
+    // Frequency: Right/Left Arrows
+    if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) waveFrequency += 0.01f;
+    if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) waveFrequency -= 0.01f;
 
-  glDisableVertexAttribArray(0);
+    // Toggles (Simple debounce logic would be better, but direct press works for rapid toggle)
+    // This makes it easier to see what is happening on a shader level to the waves.
+    if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS) toggleLighting = 1;
+    if (glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS) toggleLighting = 0;
 
-  // Swap buffers
-  glfwSwapBuffers(window);
-  glfwPollEvents();
-}
+    if (glfwGetKey(window, GLFW_KEY_C) == GLFW_PRESS) toggleColor = 1;
+    if (glfwGetKey(window, GLFW_KEY_X) == GLFW_PRESS) toggleColor = 0;
 
-bool initializeWindow()
-{
-  // Initialise GLFW
-  if (!glfwInit())
-  {
-    fprintf(stderr, "Failed to initialize GLFW\n");
-    char c = getchar();
-    return false;
-  }
+    // Camera Matrices
+  
+    glm::mat4 Projection = glm::perspective(glm::radians(45.0f), 4.0f / 3.0f, 0.1f, 100.0f);
 
-  glfwWindowHint(GLFW_SAMPLES, 4);
-  glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-  glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-  glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE); // To make MacOS happy; should not be needed
-  glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    //TODO: Bring in some camera control
+    // Camera looking at the grid from above and to the side
+    glm::mat4 View = glm::lookAt(
+        glm::vec3(15, 15, 15), // Camera is at (15,15,15)
+        glm::vec3(0, 0, 0),    // and looks at the origin
+        glm::vec3(0, 1, 0)     // Head is up
+    );
 
-  // Open a window and create its OpenGL context
-  window = glfwCreateWindow(600, 600, "Tutorial 02 - Red triangle", NULL, NULL);
-  if (window == NULL) {
-    fprintf(stderr, "Failed to open GLFW window. If you have an Intel GPU, they are not 3.3 compatible. Try the 2.1 version of the tutorials.\n");
-    char c = getchar();
-    glfwTerminate();
-    return false;
-  }
-  glfwMakeContextCurrent(window);
+    glm::mat4 Model = glm::mat4(1.0f); // Identity matrix
+    glm::mat4 MVP = Projection * View * Model;
 
-  // Initialize GLEW
-  glewExperimental = true; // Needed for core profile
-  if (glewInit() != GLEW_OK) {
-    fprintf(stderr, "Failed to initialize GLEW\n");
-    char c = getchar();
-    glfwTerminate();
-    return false;
-  }
+    //Shader Communication:
+    // Send them to shader
+    glUniformMatrix4fv(MatrixID, 1, GL_FALSE, &MVP[0][0]);
+    glUniformMatrix4fv(ModelMatrixID, 1, GL_FALSE, &Model[0][0]);
+    glUniformMatrix4fv(ViewMatrixID, 1, GL_FALSE, &View[0][0]);
 
-  // Ensure we can capture the escape key being pressed below
-  glfwSetInputMode(window, GLFW_STICKY_KEYS, GL_TRUE);
+    // Send Time
+    float time = (float)glfwGetTime();
+    glUniform1f(TimeID, time);
 
-  // Dark blue background
-  glClearColor(0.0f, 0.0f, 0.4f, 0.0f);
-  return true;
+    // Send Controls
+    glUniform1f(AmpID, waveAmplitude);
+    glUniform1f(FreqID, waveFrequency);
+    glUniform1f(SpeedID, waveSpeed);
+    glUniform1i(LightToggleID, toggleLighting);
+    glUniform1i(ColorToggleID, toggleColor);
+
+    // Draw
+    glEnableVertexAttribArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, vertexbuffer);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
+
+    // Draw grid as triangles
+    glDrawArrays(GL_TRIANGLES, 0, vertexCount);
+
+    glDisableVertexAttribArray(0);
+
+    glfwSwapBuffers(window);
+    glfwPollEvents();
 }
 
 bool initializeVertexbuffer()
 {
-  glGenVertexArrays(1, &VertexArrayID);
-  glBindVertexArray(VertexArrayID);
+    glGenVertexArrays(1, &VertexArrayID);
+    glBindVertexArray(VertexArrayID);
 
-  std::vector< glm::vec3 > vertices = std::vector< glm::vec3 >();
+    std::vector<glm::vec3> vertices;
 
-  vertices.push_back({ -1.0f, -1.0f, 0.0f });
-  vertices.push_back({ 1.0f, -1.0f, 0.0f });
-  vertices.push_back({ 0.0f,  1.0f, 0.0f });
-  vertexbuffer_size = (GLuint)vertices.size() * (GLuint)sizeof(glm::vec3);
+	//Mesh Grid generation, 2x2 squares made of 2 triangles each
+    float offset = (GRID_SIZE * GRID_SPACING) / 2.0f; // To center the grid
 
-  glGenBuffers(1, &vertexbuffer);
-  glBindBuffer(GL_ARRAY_BUFFER, vertexbuffer);
-  glBufferData(GL_ARRAY_BUFFER, vertexbuffer_size, &vertices[0], GL_STATIC_DRAW);
+    for (int z = 0; z < GRID_SIZE; z++) {
+        for (int x = 0; x < GRID_SIZE; x++) {
 
-  return true;
+            float x_pos = (x * GRID_SPACING) - offset;
+            float z_pos = (z * GRID_SPACING) - offset;
+            float spacing = GRID_SPACING;
+
+            // Triangle 1
+            vertices.push_back({ x_pos, 0.0f, z_pos });
+            vertices.push_back({ x_pos, 0.0f, z_pos + spacing });
+            vertices.push_back({ x_pos + spacing, 0.0f, z_pos });
+
+            // Triangle 2
+            vertices.push_back({ x_pos + spacing, 0.0f, z_pos + spacing });
+            vertices.push_back({ x_pos + spacing, 0.0f, z_pos });
+            vertices.push_back({ x_pos, 0.0f, z_pos + spacing });
+        }
+    }
+
+    vertexCount = (int)vertices.size();
+    vertexbuffer_size = vertexCount * sizeof(glm::vec3);
+
+    glGenBuffers(1, &vertexbuffer);
+    glBindBuffer(GL_ARRAY_BUFFER, vertexbuffer);
+    glBufferData(GL_ARRAY_BUFFER, vertexbuffer_size, &vertices[0], GL_STATIC_DRAW);
+
+    return true;
+}
+
+bool initializeWindow()
+{
+    // Initialise GLFW
+    if (!glfwInit())
+    {
+        fprintf(stderr, "Failed to initialize GLFW\n");
+        return false;
+    }
+
+    glfwWindowHint(GLFW_SAMPLES, 4);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+
+    // Open a window and create its OpenGL context
+    window = glfwCreateWindow(1024, 768, "Wave Simulation", NULL, NULL);
+    if (window == NULL) {
+        fprintf(stderr, "Failed to open GLFW window.\n");
+        glfwTerminate();
+        return false;
+    }
+    glfwMakeContextCurrent(window);
+
+    // Initialize GLEW
+    glewExperimental = true;
+    if (glewInit() != GLEW_OK) {
+        fprintf(stderr, "Failed to initialize GLEW\n");
+        glfwTerminate();
+        return false;
+    }
+
+    // Ensure we can capture the escape key being pressed below
+    glfwSetInputMode(window, GLFW_STICKY_KEYS, GL_TRUE);
+
+    // BACKGROUND COLOR!!
+    glClearColor(0.0f, 0.0f, 0.4f, 0.0f);
+    return true;
 }
 
 bool cleanupVertexbuffer()
 {
-  // Cleanup VBO
-  glDeleteBuffers(1, &vertexbuffer);
-  glDeleteVertexArrays(1, &VertexArrayID);
-  return true;
+    // Cleanup VBO
+    glDeleteBuffers(1, &vertexbuffer);
+    glDeleteVertexArrays(1, &VertexArrayID);
+    return true;
 }
 
 bool closeWindow()
 {
-  glfwTerminate();
-  return true;
+    glfwTerminate();
+    return true;
 }
 

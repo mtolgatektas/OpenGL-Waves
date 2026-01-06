@@ -1,12 +1,50 @@
 #version 330 core
 
-// Input vertex data, different for all executions of this shader.
+//This is where the Waves mathematics are implemented
+
 layout(location = 0) in vec3 vertexPosition_modelspace;
 
-void main(){
+uniform mat4 MVP;
+uniform float time;
+uniform float u_steepness; // Control "choppiness" 
 
-    gl_Position.xyz = vertexPosition_modelspace;
-    gl_Position.w = 1.0;
+out float vHeight;
+out vec3 vNormal;
 
+//This is all based on Jerry Tessendorf's paper on ocean waves
+
+//First version without FFT
+// Function to calculate a single Gerstner Wave
+vec3 GerstnerWave(vec3 p, vec2 dir, float steepness, float wavelength, float speed, inout vec3 normal) {
+    float k = 2.0 * 3.14159 / wavelength;
+    float c = sqrt(9.8 / k); // Phase speed based on gravity
+    vec2 d = normalize(dir);
+    float f = k * (dot(d, p.xz) - speed * time);
+    float a = steepness / k;
+
+    // Update normal (partial derivatives)
+    normal.x -= d.x * k * a * cos(f);
+    normal.z -= d.y * k * a * cos(f);
+    normal.y -= steepness * sin(f);
+
+    return vec3(
+        d.x * (a * cos(f)),
+        a * sin(f),
+        d.y * (a * cos(f))
+    );
 }
 
+void main() {
+    vec3 gridPoint = vertexPosition_modelspace;
+    vec3 tangentNormal = vec3(0, 0, 0);
+    
+    // Sum of 3 waves with different directions and sizes
+    vec3 p = gridPoint;
+    p += GerstnerWave(gridPoint, vec2(1, 0), 0.3, 10.0, 1.5, tangentNormal);
+    p += GerstnerWave(gridPoint, vec2(0.5, 0.5), 0.2, 5.0, 2.5, tangentNormal);
+    p += GerstnerWave(gridPoint, vec2(0.1, 0.9), 0.1, 2.0, 1.2, tangentNormal);
+
+    vNormal = normalize(vec3(tangentNormal.x, 1.0 - tangentNormal.y, tangentNormal.z));
+    vHeight = p.y;
+    gl_Position = MVP * vec4(p, 1.0);
+}

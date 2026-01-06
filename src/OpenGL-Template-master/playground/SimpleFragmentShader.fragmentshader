@@ -1,12 +1,59 @@
 #version 330 core
 
-// Ouput data
+// Inputs from Vertex Shader
+in vec3 vPos;
+in vec3 vNormal;
+in float vHeight;
+
+// Outputs
 out vec3 color;
+
+// Uniforms / Toggles
+uniform int u_toggleLighting; // 1 or 0
+uniform int u_toggleColor;    // 1 or 0
+uniform float u_amplitude;
 
 void main()
 {
+    // Basic Shading Until I can get the waves working properly
+    vec3 baseColor;
+    
+    if(u_toggleColor == 1){
+        // Interpolate color based on height relative to amplitude
+        // Map height from [-amp, amp] to [0, 1]
+        float t = (vHeight + u_amplitude) / (2.0 * u_amplitude);
+        
+        // Low points = Blue, High points = Cyan/White
+        vec3 lowColor = vec3(0.0, 0.1, 0.6); // Deep blue
+        vec3 highColor = vec3(0.4, 0.8, 1.0); // Light water
+        baseColor = mix(lowColor, highColor, t);
+    } else {
+        // Flat solid color (Greenish) if toggle is off
+        baseColor = vec3(0.0, 0.8, 0.5); 
+    }
 
-	// Output color = red 
-	color = vec3(1,0,0);
+    // --- 2. Lighting Calculation ---
+    vec3 finalColor;
 
+    if(u_toggleLighting == 1){
+        // Simple directional light
+        vec3 lightDir = normalize(vec3(0.5, 1.0, 0.3)); // Light coming from up-right
+        
+        // Ambient component
+        float ambientStrength = 0.3;
+        vec3 ambient = ambientStrength * vec3(1.0, 1.0, 1.0);
+        
+        // Diffuse component (How much does the normal face the light?)
+        // max(..., 0.0) ensures we don't get negative light
+        float diff = max(dot(vNormal, lightDir), 0.0);
+        vec3 diffuse = diff * vec3(1.0, 1.0, 1.0);
+        
+        // Combine
+        finalColor = (ambient + diffuse) * baseColor;
+    } else {
+        // Just raw color
+        finalColor = baseColor;
+    }
+
+    color = finalColor;
 }
