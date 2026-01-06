@@ -13,7 +13,7 @@ out vec3 vNormal;
 
 //This is all based on Jerry Tessendorf's paper on ocean waves
 
-//First version without FFT
+// First version without FFT
 // Function to calculate a single Gerstner Wave
 vec3 GerstnerWave(vec3 p, vec2 dir, float steepness, float wavelength, float speed, inout vec3 normal) {
     float k = 2.0 * 3.14159 / wavelength;

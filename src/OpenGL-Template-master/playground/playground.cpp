@@ -4,23 +4,23 @@
 #include <vector>
 #include <iostream>
 
-// Include GLFW
+
 #include <glfw3.h>
 GLFWwindow* window;
 
-// Include GLM
+
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 using namespace glm;
 
 #include <common/shader.hpp>
 
-//Globals
+// Globals
 
 GLuint MatrixID, ModelMatrixID, ViewMatrixID;
 GLuint TimeID, AmpID, FreqID, SpeedID, LightToggleID, ColorToggleID;
 
-//Wave Parameters
+// Wave Parameters
 float waveAmplitude = 0.5f;
 float waveFrequency = 1.0f;
 float waveSpeed = 2.0f;
@@ -39,18 +39,18 @@ int main(void)
     bool windowInitialized = initializeWindow();
     if (!windowInitialized) return -1;
 
-    // Enable Depth Test (Crucial for 3D waves)
+    // Enable Depth Test
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
 
-    // Initialize vertex buffer (Now generates a grid)
+    // Initialize vertex buffer 
     bool vertexbufferInitialized = initializeVertexbuffer();
     if (!vertexbufferInitialized) return -1;
 
-    // Create and compile our GLSL program from the shaders
+    
     programID = LoadShaders("SimpleVertexShader.vertexshader", "SimpleFragmentShader.fragmentshader");
 
-    // Get a handle for our "Uniform" variables in the shader
+    // Handles for shader variables
     MatrixID = glGetUniformLocation(programID, "MVP");
     ModelMatrixID = glGetUniformLocation(programID, "M");
     ViewMatrixID = glGetUniformLocation(programID, "V");
@@ -115,7 +115,7 @@ void updateAnimationLoop()
     glm::mat4 Model = glm::mat4(1.0f); // Identity matrix
     glm::mat4 MVP = Projection * View * Model;
 
-    //Shader Communication:
+    // Shader Communication:
     // Send them to shader
     glUniformMatrix4fv(MatrixID, 1, GL_FALSE, &MVP[0][0]);
     glUniformMatrix4fv(ModelMatrixID, 1, GL_FALSE, &Model[0][0]);
@@ -153,7 +153,7 @@ bool initializeVertexbuffer()
 
     std::vector<glm::vec3> vertices;
 
-	//Mesh Grid generation, 2x2 squares made of 2 triangles each
+	// Mesh Grid generation, 2x2 squares made of 2 triangles each
     float offset = (GRID_SIZE * GRID_SPACING) / 2.0f; // To center the grid
 
     for (int z = 0; z < GRID_SIZE; z++) {
