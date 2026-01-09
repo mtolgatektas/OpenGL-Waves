@@ -100,6 +100,9 @@ void updateAnimationLoop()
     if (glfwGetKey(window, GLFW_KEY_C) == GLFW_PRESS) toggleColor = 1;
     if (glfwGetKey(window, GLFW_KEY_X) == GLFW_PRESS) toggleColor = 0;
 
+
+
+
     // Camera Matrices
   
     glm::mat4 Projection = glm::perspective(glm::radians(45.0f), 4.0f / 3.0f, 0.1f, 100.0f);
