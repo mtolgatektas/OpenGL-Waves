@@ -9,6 +9,7 @@ in float vHeight;
 out vec3 color;
 
 // Uniforms / Toggles
+uniform vec3 u_cameraPos; //importante
 uniform int u_toggleLighting; // 1 or 0
 uniform int u_toggleColor;    // 1 or 0
 uniform float u_amplitude;
@@ -21,12 +22,12 @@ void main()
     if(u_toggleColor == 1){
         // Interpolate color based on height relative to amplitude
         // Map height from [-amp, amp] to [0, 1]
-        float t = (vHeight + u_amplitude) / (2.0 * u_amplitude);
+        float t = (vHeight + u_amplitude) / (2.0 * u_amplitude + 0.001);
         
         // Low points = Blue, High points = Cyan/White
         vec3 lowColor = vec3(0.0, 0.1, 0.6); // Deep blue
         vec3 highColor = vec3(0.4, 0.8, 1.0); // Light water
-        baseColor = mix(lowColor, highColor, t);
+        baseColor = mix(lowColor, highColor, clamp(t, 0.0, 1.0)); //amplitude<0 can mess the image, hence clamp.
     } else {
         // Flat solid color (Greenish) if toggle is off
         baseColor = vec3(0.0, 0.8, 0.5); 
@@ -38,7 +39,10 @@ void main()
     if(u_toggleLighting == 1){
         // Simple directional light
         vec3 lightDir = normalize(vec3(0.5, 1.0, 0.3)); // Light coming from up-right
-        
+        //now we have view directions
+        vec3 viewDir = normalize(u_cameraPos - vPos); 
+        vec3 halfwayDir = normalize(lightDir + viewDir);
+
         // Ambient component
         float ambientStrength = 0.3;
         vec3 ambient = ambientStrength * vec3(1.0, 1.0, 1.0);
@@ -47,9 +51,14 @@ void main()
         // max(..., 0.0) ensures we don't get negative light
         float diff = max(dot(vNormal, lightDir), 0.0);
         vec3 diffuse = diff * vec3(1.0, 1.0, 1.0);
-        
+
+        //UPDATE: finally specular lighting.
+        //arguably the most complicated one, camera and all. now we get all Phong Shading elements
+        float spec = pow(max(dot(vNormal, halfwayDir), 0.0), 32.0);
+        vec3 specular = spec * vec3(1.0, 1.0, 1.0);
+
         // Combine
-        finalColor = (ambient + diffuse) * baseColor;
+        finalColor = (ambient + diffuse) * baseColor + specular;
     } else {
         // Just raw color
         finalColor = baseColor;

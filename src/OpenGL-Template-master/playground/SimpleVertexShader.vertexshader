@@ -6,7 +6,10 @@
 layout(location = 0) in vec3 vertexPosition_modelspace;
 
 uniform mat4 MVP;
+uniform mat4 M;
 uniform float time;
+
+out vec3 vPos; //we need this for specular lighting changing with the camera
 
 // CONTROLS
 
@@ -57,6 +60,8 @@ void main() {
     // Just with 4 waves it will already look more chaotic and waterlike. 
 
     vec3 p = gridPoint;
+    vPos = p; //pos starts here as well.
+
    // Big Wave
    p += GerstnerWave(gridPoint, vec2(1.0, 0.2), u_amplitude * 0.5, 20.0, accumulatedNormal);
 
@@ -71,5 +76,6 @@ void main() {
 
     vNormal = normalize(accumulatedNormal);
     vHeight = p.y;
+    vPos = vec3(M * vec4(p, 1.0)); // Transform to world space for fragment lighting
     gl_Position = MVP * vec4(p, 1.0);
 }

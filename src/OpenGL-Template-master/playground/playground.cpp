@@ -14,11 +14,32 @@ GLFWwindow* window;
 using namespace glm;
 
 #include <common/shader.hpp>
+//forward declerations for the camera. I should just do a header...
+//TODO: Header Class
+void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods);
+void mouse_callback(GLFWwindow* window, double xpos, double ypos);
+
 
 // Globals
 
 GLuint MatrixID, ModelMatrixID, ViewMatrixID;
 GLuint TimeID, AmpID, FreqID, SpeedID, LightToggleID, ColorToggleID;
+GLuint CameraPosID;
+
+// Camera Variables
+vec3 cameraPos = vec3(15.0f, 15.0f, 15.0f);
+vec3 cameraFront = vec3(-1.0f, -1.0f, -1.0f);
+vec3 cameraUp = vec3(0.0f, 1.0f, 0.0f);
+
+bool firstMouse = true;
+float yaw = -135.0f;
+float pitch = -35.0f;
+float lastX = 1024.0f / 2.0f;
+float lastY = 768.0f / 2.0f;
+float fov = 45.0f;
+
+float deltaTime = 0.0f;
+float lastFrame = 0.0f;
 
 // Wave Parameters
 float waveAmplitude = 0.5f;
@@ -33,11 +54,51 @@ const float GRID_SPACING = 0.5f;
 
 int vertexCount = 0;
 
+
+void mouse_callback(GLFWwindow* window, double xposIn, double yposIn)
+{
+    float xpos = static_cast<float>(xposIn);
+    float ypos = static_cast<float>(yposIn);
+
+    if (firstMouse)
+    {
+        lastX = xpos;
+        lastY = ypos;
+        firstMouse = false;
+    }
+
+    float xoffset = xpos - lastX;
+    float yoffset = lastY - ypos;
+    lastX = xpos;
+    lastY = ypos;
+
+    float sensitivity = 0.1f;
+    xoffset *= sensitivity;
+    yoffset *= sensitivity;
+
+    yaw += xoffset;
+    pitch += yoffset;
+
+    if (pitch > 89.0f) pitch = 89.0f;
+    if (pitch < -89.0f) pitch = -89.0f;
+
+    vec3 front;
+    front.x = cos(radians(yaw)) * cos(radians(pitch));
+    front.y = sin(radians(pitch));
+    front.z = sin(radians(yaw)) * cos(radians(pitch));
+    cameraFront = normalize(front);
+}
+
+
 int main(void)
 {
     // Initialize window
     bool windowInitialized = initializeWindow();
     if (!windowInitialized) return -1;
+
+    // Camera 
+    glfwSetCursorPosCallback(window, mouse_callback);
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
     // Enable Depth Test
     glEnable(GL_DEPTH_TEST);
@@ -65,6 +126,10 @@ int main(void)
 
     // Start animation loop
     do {
+        float currentFrame = static_cast<float>(glfwGetTime());
+        deltaTime = currentFrame - lastFrame;
+        lastFrame = currentFrame;
+
         updateAnimationLoop();
     } while (glfwGetKey(window, GLFW_KEY_ESCAPE) != GLFW_PRESS &&
         glfwWindowShouldClose(window) == 0);
@@ -76,12 +141,31 @@ int main(void)
     return 0;
 }
 
+//Im moving all camera and key controls under a single method.
+//this project has implemented the camera controls well already: https://github.com/czartur/ocean_fft/blob/main/src/cgp_custom.cpp
+
+
+// Same 
+
+
+
 void updateAnimationLoop()
 {
     // Clear the screen and Depth buffer
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
     glUseProgram(programID);
+
+    // Camera Movement: 
+    float cameraSpeed = 10.0f * deltaTime;
+    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+        cameraPos += cameraSpeed * cameraFront;
+    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+        cameraPos -= cameraSpeed * cameraFront;
+    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+        cameraPos -= normalize(cross(cameraFront, cameraUp)) * cameraSpeed;
+    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+        cameraPos += normalize(cross(cameraFront, cameraUp)) * cameraSpeed;
+
 
     // Controls
     // Amplitude: Up/Down Arrows
@@ -105,30 +189,21 @@ void updateAnimationLoop()
 
     // Camera Matrices
   
-    glm::mat4 Projection = glm::perspective(glm::radians(45.0f), 4.0f / 3.0f, 0.1f, 100.0f);
+ // UPDATE: Camera now moves. yay!
 
-    //TODO: Bring in some camera control
-    // Camera looking at the grid from above and to the side
-    glm::mat4 View = glm::lookAt(
-        glm::vec3(15, 15, 15), // Camera is at (15,15,15)
-        glm::vec3(0, 0, 0),    // and looks at the origin
-        glm::vec3(0, 1, 0)     // Head is up
-    );
 
-    glm::mat4 Model = glm::mat4(1.0f); // Identity matrix
-    glm::mat4 MVP = Projection * View * Model;
+    mat4 Projection = perspective(radians(45.0f), 4.0f / 3.0f, 0.1f, 100.0f);
+    mat4 View = lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
+    mat4 Model = mat4(1.0f);
+    mat4 MVP = Projection * View * Model;
 
-    // Shader Communication:
-    // Send them to shader
     glUniformMatrix4fv(MatrixID, 1, GL_FALSE, &MVP[0][0]);
     glUniformMatrix4fv(ModelMatrixID, 1, GL_FALSE, &Model[0][0]);
     glUniformMatrix4fv(ViewMatrixID, 1, GL_FALSE, &View[0][0]);
+    glUniform3fv(CameraPosID, 1, &cameraPos[0]);
 
-    // Send Time
     float time = (float)glfwGetTime();
     glUniform1f(TimeID, time);
-
-    // Send Controls
     glUniform1f(AmpID, waveAmplitude);
     glUniform1f(FreqID, waveFrequency);
     glUniform1f(SpeedID, waveSpeed);
@@ -241,4 +316,3 @@ bool closeWindow()
     glfwTerminate();
     return true;
 }
-
