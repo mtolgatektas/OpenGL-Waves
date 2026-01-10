@@ -74,8 +74,10 @@ void main() {
     // "Chop" 
     p += GerstnerWave(gridPoint, vec2(0.5, -0.4), u_amplitude * 0.2, 2.0, accumulatedNormal);
 
-    vNormal = normalize(accumulatedNormal);
+    vNormal = normalize(vec3(-accumulatedNormal.x, 1.0, -accumulatedNormal.z)); //now the normal will point up.
     vHeight = p.y;
     vPos = vec3(M * vec4(p, 1.0)); // Transform to world space for fragment lighting
     gl_Position = MVP * vec4(p, 1.0);
+
+
 }

@@ -13,10 +13,30 @@ uniform vec3 u_cameraPos; //importante
 uniform int u_toggleLighting; // 1 or 0
 uniform int u_toggleColor;    // 1 or 0
 uniform float u_amplitude;
+uniform samplerCube skybox;
+uniform float time; 
+
+uniform sampler2D perlinNormal; 
+uniform sampler2D perlinDudv;
 
 void main()
 {
-    // Basic Shading Until I can get the waves working properly
+
+    bool isUnderwater = u_cameraPos.y < 0.0; // Under the water the ocean will look different
+
+    //Normal map! this is gonna give it a swirl!
+    vec2 distortedTexCoords = texture(perlinDudv, (vPos.xz * 0.1) + time * 0.01).rg * 0.1;
+    vec3 nmSample = texture(perlinNormal, (vPos.xz * 0.1) + distortedTexCoords + time * 0.02).rgb;
+
+    vec3 pixelNormal = normalize(nmSample * 2.0 - 1.0); //we squeeze the entire normal map
+
+    vec3 normal = normalize(vNormal + pixelNormal * 0.2); //in the new normal we blend it with the normalization map
+    vec3 lightDir = normalize(vec3(0.5, 1.0, 0.3)); // Light coming from up-right
+        //now we have view directions
+    vec3 viewDir = normalize(u_cameraPos - vPos); 
+    vec3 halfwayDir = normalize(lightDir + viewDir);
+
+    // Tessendorf style realistic water shading: 
     vec3 baseColor;
     
     if(u_toggleColor == 1){
@@ -25,9 +45,10 @@ void main()
         float t = (vHeight + u_amplitude) / (2.0 * u_amplitude + 0.001);
         
         // Low points = Blue, High points = Cyan/White
-        vec3 lowColor = vec3(0.0, 0.1, 0.6); // Deep blue
-        vec3 highColor = vec3(0.4, 0.8, 1.0); // Light water
-        baseColor = mix(lowColor, highColor, clamp(t, 0.0, 1.0)); //amplitude<0 can mess the image, hence clamp.
+        vec3 deepWater = vec3(0.005, 0.02, 0.05);
+        vec3 shallowWater = vec3(0.0, 0.2, 0.3);
+
+        baseColor = mix(deepWater, shallowWater, clamp(t, 0.0, 1.0));
     } else {
         // Flat solid color (Greenish) if toggle is off
         baseColor = vec3(0.0, 0.8, 0.5); 
@@ -37,32 +58,63 @@ void main()
     vec3 finalColor;
 
     if(u_toggleLighting == 1){
-        // Simple directional light
-        vec3 lightDir = normalize(vec3(0.5, 1.0, 0.3)); // Light coming from up-right
-        //now we have view directions
-        vec3 viewDir = normalize(u_cameraPos - vPos); 
-        vec3 halfwayDir = normalize(lightDir + viewDir);
+        
+        
+        //To add the realistic ocean look we need to add a few things:
+        //Fresnel effect, Sky reflection, color mixing and maybe foam.
 
-        // Ambient component
-        float ambientStrength = 0.3;
-        vec3 ambient = ambientStrength * vec3(1.0, 1.0, 1.0);
+        //Fresnel Effect
+        float fresnel = pow(1.0 - max(dot(normal, viewDir), 0.0), 5.0);
+
+        //Reflection
+        vec3 reflectDir = reflect(-viewDir, normal);
+        // Reflect the skybox
+        vec3 skyReflection = texture(skybox, reflectDir).rgb;
+
+
+        //Phong shading is good for material objects but creates an unrealistic
+        //Water look where most of the realism comes from light refraction.
+        //There isn't a set Ambient and Diffuse component per se,
+
+        //Spacial component works similiarly however
+
+        /* Ambient component
+        //float ambientStrength = 0.3;
+        //vec3 ambient = ambientStrength * vec3(1.0, 1.0, 1.0);
         
         // Diffuse component (How much does the normal face the light?)
-        // max(..., 0.0) ensures we don't get negative light
+         max(..., 0.0) ensures we don't get negative light
         float diff = max(dot(vNormal, lightDir), 0.0);
-        vec3 diffuse = diff * vec3(1.0, 1.0, 1.0);
+        */
 
-        //UPDATE: finally specular lighting.
-        //arguably the most complicated one, camera and all. now we get all Phong Shading elements
-        float spec = pow(max(dot(vNormal, halfwayDir), 0.0), 32.0);
-        vec3 specular = spec * vec3(1.0, 1.0, 1.0);
+        //Now we get a realistic "Sun Glint" on the waves.
+        float spec = pow(max(dot(normal, halfwayDir), 0.0), 256.0); // You can play with this number to make water Shinier or Matte
+        vec3 sunGlint = vec3(1.0, 0.9, 0.8) * spec * 2.0;
 
-        // Combine
-        finalColor = (ambient + diffuse) * baseColor + specular;
+        if(!isUnderwater) {
+            //the usual
+            finalColor = mix(baseColor, skyReflection, fresnel) + sunGlint;
+
+            // FOAM!! Slosh slosh
+            float foamThreshold = u_amplitude * 0.8;
+            float foamAmount = clamp((vHeight - foamThreshold) / (u_amplitude - foamThreshold + 0.001), 0.0, 1.0);
+            vec3 foamColor = vec3(0.9, 0.9, 1.0);
+            finalColor = mix(finalColor, foamColor, foamAmount * 0.4);
+        } else {
+            
+            // We mix the base water color with a deep "sea fog" based on distance
+            //Its not as obvious rn
+
+            float depthDist = length(u_cameraPos - vPos);
+            float fogFactor = exp(-depthDist * 0.1); // Play around for murkiness
+            vec3 murkyBlue = vec3(0.0, 0.1, 0.2);
+            finalColor = mix(murkyBlue, baseColor * 0.5, fogFactor);
+        }
+
     } else {
-        // Just raw color
+
         finalColor = baseColor;
     }
 
-    color = finalColor;
+    color = finalColor; //color out
 }

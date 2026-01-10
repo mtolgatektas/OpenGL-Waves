@@ -14,8 +14,13 @@ GLFWwindow* window;
 using namespace glm;
 
 #include <common/shader.hpp>
+
+// We need this library to load the JPG's for the skybox
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
 //forward declerations for the camera. I should just do a header...
-//TODO: Header Class
+//TODO: Move things to Header.
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 
@@ -25,6 +30,16 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 GLuint MatrixID, ModelMatrixID, ViewMatrixID;
 GLuint TimeID, AmpID, FreqID, SpeedID, LightToggleID, ColorToggleID;
 GLuint CameraPosID;
+
+// Skybox
+GLuint SkyboxTextureID;
+GLuint SkyProgramID;
+GLuint SkyVAO, SkyVBO;
+
+//Normal Map
+
+GLuint normalTextureID;
+GLuint dudvTextureID;
 
 // Camera Variables
 vec3 cameraPos = vec3(15.0f, 15.0f, 15.0f);
@@ -49,12 +64,13 @@ int toggleLighting = 1; // 1 = On, 0 = Off
 int toggleColor = 1;    // 1 = Height Color, 0 = Solid
 
 //Grid settings
-const int GRID_SIZE = 40; // 40x40 grid
+const int GRID_SIZE = 500; // 40x40 grid
 const float GRID_SPACING = 0.5f;
 
 int vertexCount = 0;
 
-
+//the changes made to the camera are from the source code at LearnOpenGL's Camera section
+//https://learnopengl.com/Getting-started/Camera
 void mouse_callback(GLFWwindow* window, double xposIn, double yposIn)
 {
     float xpos = static_cast<float>(xposIn);
@@ -89,6 +105,171 @@ void mouse_callback(GLFWwindow* window, double xposIn, double yposIn)
     cameraFront = normalize(front);
 }
 
+//Skybox Methods
+
+//The skybox method is adapted from an FFT Ocean project found here:https://github.com/iamyoukou/fftWater/tree/master
+//This is originally for IOS so I had to change a lot of stuff but the idea is the same and the jpg's are from there as well
+
+unsigned int loadCubemap(std::vector<std::string> faces)
+{
+    unsigned int textureID;
+    glGenTextures(1, &textureID);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, textureID);
+
+    int width, height, nrChannels;
+    for (unsigned int i = 0; i < faces.size(); i++)
+    {
+        unsigned char* data = stbi_load(faces[i].c_str(), &width, &height, &nrChannels, 0);
+        if (data)
+        {
+            
+            glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i,
+                0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data
+            );
+            stbi_image_free(data);
+        }
+        else
+        {
+            std::cout << "FAILED to load: " << faces[i] << " | Error: " << stbi_failure_reason() << std::endl;
+            stbi_image_free(data);
+        }
+    }
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+
+    return textureID;
+}
+
+void initSkybox() {
+   
+    float skyboxVertices[] = {
+        
+        -1.0f,  1.0f, -1.0f,
+        -1.0f, -1.0f, -1.0f,
+         1.0f, -1.0f, -1.0f,
+         1.0f, -1.0f, -1.0f,
+         1.0f,  1.0f, -1.0f,
+        -1.0f,  1.0f, -1.0f,
+
+        -1.0f, -1.0f,  1.0f,
+        -1.0f, -1.0f, -1.0f,
+        -1.0f,  1.0f, -1.0f,
+        -1.0f,  1.0f, -1.0f,
+        -1.0f,  1.0f,  1.0f,
+        -1.0f, -1.0f,  1.0f,
+
+         1.0f, -1.0f, -1.0f,
+         1.0f, -1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f, -1.0f,
+         1.0f, -1.0f, -1.0f,
+
+        -1.0f, -1.0f,  1.0f,
+        -1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f, -1.0f,  1.0f,
+        -1.0f, -1.0f,  1.0f,
+
+        -1.0f,  1.0f, -1.0f,
+         1.0f,  1.0f, -1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,
+         -1.0f,  1.0f,  1.0f,
+        -1.0f,  1.0f, -1.0f,
+
+        -1.0f, -1.0f, -1.0f,
+        -1.0f, -1.0f,  1.0f,
+         1.0f, -1.0f, -1.0f,
+         1.0f, -1.0f, -1.0f,
+        -1.0f, -1.0f,  1.0f,
+         1.0f, -1.0f,  1.0f
+    };
+
+    glGenVertexArrays(1, &SkyVAO);
+    glGenBuffers(1, &SkyVBO);
+    glBindVertexArray(SkyVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, SkyVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(skyboxVertices), &skyboxVertices, GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+
+    
+    SkyProgramID = LoadShaders("SkyBoxVertexShader.vertexshader", "SkyBoxFragmentShader.fragmentshader");
+
+    
+    std::vector<std::string> faces = {
+    "right.png",
+    "left.png",
+    "top.png",
+    "bottom.png",
+    "front.png",
+    "back.png"
+    };
+    SkyboxTextureID = loadCubemap(faces);
+
+    
+    glUseProgram(SkyProgramID);
+    glUniform1i(glGetUniformLocation(SkyProgramID, "skybox"), 0);
+}
+
+void drawSkybox(glm::mat4 viewMatrix, glm::mat4 projMatrix) {
+    glDepthFunc(GL_LEQUAL);// This makes it less demanding, do Reset  
+    glUseProgram(SkyProgramID);
+
+    // viewMatrix
+    glm::mat4 view = glm::mat4(glm::mat3(viewMatrix));
+
+    glUniformMatrix4fv(glGetUniformLocation(SkyProgramID, "view"), 1, GL_FALSE, &view[0][0]);
+    glUniformMatrix4fv(glGetUniformLocation(SkyProgramID, "projection"), 1, GL_FALSE, &projMatrix[0][0]);
+
+    // Bind the texture
+    glBindVertexArray(SkyVAO);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, SkyboxTextureID);
+
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+    glBindVertexArray(0);
+    glDepthFunc(GL_LESS); // Reset the optimization function
+}
+    // Normal Mapping texture loaders: 
+
+GLuint loadTexture(const char* path) {
+    GLuint textureID;
+    glGenTextures(1, &textureID);
+
+    int width, height, nrComponents;
+    unsigned char* data = stbi_load(path, &width, &height, &nrComponents, 0);
+    if (data) {
+        GLenum format;
+        if (nrComponents == 1) format = GL_RED;
+        else if (nrComponents == 3) format = GL_RGB;
+        else if (nrComponents == 4) format = GL_RGBA;
+
+        glBindTexture(GL_TEXTURE_2D, textureID);
+        glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+        glGenerateMipmap(GL_TEXTURE_2D);
+
+        // We want the ripples to repeat on the whole thing, not just once
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+        stbi_image_free(data);
+    }
+    else {
+        std::cout << "Texture failed to load at path: " << path << std::endl; //exe is in bin/debug (WHY I DON'T KNOW) so pics in the src
+                                                                              //couldn't be found, giving a white screen for a long time. The same 
+                                                                              //deal as the loader above.
+        stbi_image_free(data);
+    }
+    return textureID;
+}
 
 int main(void)
 {
@@ -108,10 +289,28 @@ int main(void)
     bool vertexbufferInitialized = initializeVertexbuffer();
     if (!vertexbufferInitialized) return -1;
 
+    initSkybox(); //SkyBox start
     
+    //Normal mapping uniforms
+
+    normalTextureID = loadTexture("perlinNormal.png"); 
+    dudvTextureID = loadTexture("perlinDudv.png");
+
+  
+
     programID = LoadShaders("SimpleVertexShader.vertexshader", "SimpleFragmentShader.fragmentshader");
+    CameraPosID = glGetUniformLocation(programID, "u_cameraPos");
+
+    //Normal Mapping
+    GLuint normalLoc = glGetUniformLocation(programID, "perlinNormal");
+    GLuint dudvLoc = glGetUniformLocation(programID, "perlinDudv");
+
+    glUseProgram(programID);
+    glUniform1i(normalLoc, 1);
+    glUniform1i(dudvLoc, 2);
 
     // Handles for shader variables
+   
     MatrixID = glGetUniformLocation(programID, "MVP");
     ModelMatrixID = glGetUniformLocation(programID, "M");
     ViewMatrixID = glGetUniformLocation(programID, "V");
@@ -145,15 +344,49 @@ int main(void)
 //this project has implemented the camera controls well already: https://github.com/czartur/ocean_fft/blob/main/src/cgp_custom.cpp
 
 
-// Same 
-
-
 
 void updateAnimationLoop()
 {
+
+    // Camera Matrices
+
+// UPDATE: Camera now moves. yay!
+
+
+    mat4 Projection = perspective(radians(45.0f), 4.0f / 3.0f, 0.1f, 1000.0f);
+    mat4 View = lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
+    mat4 Model = mat4(1.0f);
+    mat4 MVP = Projection * View * Model;
+
     // Clear the screen and Depth buffer
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    
+    drawSkybox(View, Projection); //We need to draw the sky before water.
+    glBindVertexArray(VertexArrayID);//We need to bind the water vertex layout befor the sky renders. Without this line
+                                    //You only see the skybox.
+
     glUseProgram(programID);
+
+    //TEXTURES!!!
+    //We are adding a normalization map, the maps are taken from https://github.com/iamyoukou/fftWater/tree/master
+    //since the project itself is again slightly different, it had to be adapted but this is very similiar
+    //to how the skybox is loaded. The real magic is in the fragment shader, where the its used to 
+    //add tiny details into the normal.
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, SkyboxTextureID);
+    glUniform1i(glGetUniformLocation(programID, "skybox"), 0);
+
+    // Normal Map
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, normalTextureID); // Texture ID from stbi_load
+    glUniform1i(glGetUniformLocation(programID, "perlinNormal"), 1);
+
+    // DuDv Map
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, dudvTextureID); // Texture ID from stbi_load
+    glUniform1i(glGetUniformLocation(programID, "perlinDudv"), 2);
+
 
     // Camera Movement: 
     float cameraSpeed = 10.0f * deltaTime;
@@ -187,15 +420,7 @@ void updateAnimationLoop()
 
 
 
-    // Camera Matrices
-  
- // UPDATE: Camera now moves. yay!
 
-
-    mat4 Projection = perspective(radians(45.0f), 4.0f / 3.0f, 0.1f, 100.0f);
-    mat4 View = lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
-    mat4 Model = mat4(1.0f);
-    mat4 MVP = Projection * View * Model;
 
     glUniformMatrix4fv(MatrixID, 1, GL_FALSE, &MVP[0][0]);
     glUniformMatrix4fv(ModelMatrixID, 1, GL_FALSE, &Model[0][0]);
@@ -215,7 +440,16 @@ void updateAnimationLoop()
     glBindBuffer(GL_ARRAY_BUFFER, vertexbuffer);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
 
+    // Skybox binder
+
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, SkyboxTextureID);
+    glUniform1i(glGetUniformLocation(programID, "skybox"), 1);
+
     // Draw grid as triangles
+    glDrawArrays(GL_TRIANGLES, 0, vertexCount);
+
+
     glDrawArrays(GL_TRIANGLES, 0, vertexCount);
 
     glDisableVertexAttribArray(0);
