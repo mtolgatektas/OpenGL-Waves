@@ -353,7 +353,7 @@ void updateAnimationLoop()
 // UPDATE: Camera now moves. yay!
 
 
-    mat4 Projection = perspective(radians(45.0f), 4.0f / 3.0f, 0.1f, 1000.0f);
+    mat4 Projection = perspective(radians(45.0f), 4.0f / 3.0f, 0.5f, 1000.0f);
     mat4 View = lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
     mat4 Model = mat4(1.0f);
     mat4 MVP = Projection * View * Model;
@@ -389,7 +389,7 @@ void updateAnimationLoop()
 
 
     // Camera Movement: 
-    float cameraSpeed = 10.0f * deltaTime;
+    float cameraSpeed = 50.0f * deltaTime;
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
         cameraPos += cameraSpeed * cameraFront;
     if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
@@ -499,6 +499,8 @@ bool initializeVertexbuffer()
 
 bool initializeWindow()
 {
+    // This is the magic line for skybox seams
+    
     // Initialise GLFW
     if (!glfwInit())
     {
@@ -513,7 +515,7 @@ bool initializeWindow()
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
     // Open a window and create its OpenGL context
-    window = glfwCreateWindow(1024, 768, "Wave Simulation", NULL, NULL);
+    window = glfwCreateWindow(1980, 1080, "Wave Simulation", NULL, NULL);
     if (window == NULL) {
         fprintf(stderr, "Failed to open GLFW window.\n");
         glfwTerminate();

@@ -23,11 +23,12 @@ uniform float u_amplitude;
 //function to create a single wave. in the main func we will initialize a few on top of each other to get something
 //more realistic
 
-vec3 GerstnerWave(vec3 p, vec2 dir, float steepness, float wavelength, inout vec3 normal) {
+//added "phase shift", this will move all the waves a little bit off center and break them a little.
+vec3 GerstnerWave(vec3 p, vec2 dir, float steepness, float wavelength, inout vec3 normal,float phaseShift) {
     float k = 2.0 * 3.14159 / wavelength;
     float frequency = sqrt(9.8 / k); // Phase speed based on gravity
     vec2 d = normalize(dir);
-    float f = k * (dot(d, p.xz) - frequency * time);
+    float f = k * (dot(d, p.xz) - frequency * time) + phaseShift;
     float a = steepness / k;
 
     float c = cos(f);
@@ -51,30 +52,35 @@ vec3 GerstnerWave(vec3 p, vec2 dir, float steepness, float wavelength, inout vec
 }
 
 void main() {
-    vec3 gridPoint = vertexPosition_modelspace;
+    // vec3 gridPoint = vertexPosition_modelspace; using this as the location parameter of the waves 
+    //causes the repeated look of the waves. we will use the real world vertex location of the waves to break the patterns
     vec3 accumulatedNormal = vec3(0.0, 1.0, 0.0);
+
 
     //vec3 tangentNormal = vec3(0, 0, 0);
     
     // We add to the one gerstner wave smaller waves to make it look less uniform and homogenous.
     // Just with 4 waves it will already look more chaotic and waterlike. 
 
-    vec3 p = gridPoint;
+    vec4 worldPos = M * vec4(vertexPosition_modelspace, 1.0);
+    vec3 p = vertexPosition_modelspace;
     vPos = p; //pos starts here as well.
 
+    //the more the irregular the numbers, or primes, the more natural the look.
+
    // Big Wave
-   p += GerstnerWave(gridPoint, vec2(1.0, 0.2), u_amplitude * 0.5, 20.0, accumulatedNormal);
+   p += GerstnerWave(worldPos.xyz, vec2(1.0, 0.15), u_amplitude * 0.45, 50.1, accumulatedNormal,0.0);
 
     // Cross-Swell 
-    p += GerstnerWave(gridPoint, vec2(0.7, 1.0), u_amplitude * 0.4, 12.0, accumulatedNormal);
+    p += GerstnerWave(worldPos.xyz, vec2(-0.7, 0.9), u_amplitude * 0.35, 24.7, accumulatedNormal,1.5);
     
     // Detail Wave 
-    p += GerstnerWave(gridPoint, vec2(-0.2, 0.8), u_amplitude * 0.3, 5.0, accumulatedNormal);
+    p += GerstnerWave(worldPos.xyz, vec2(0.2, 0.8), u_amplitude * 0.2, 18.3, accumulatedNormal,2.6);
     
     // "Chop" 
-    p += GerstnerWave(gridPoint, vec2(0.5, -0.4), u_amplitude * 0.2, 2.0, accumulatedNormal);
+    p += GerstnerWave(worldPos.xyz, vec2(0.5, -0.6), u_amplitude * 0.15, 4.1, accumulatedNormal,4.2);
 
-    vNormal = normalize(vec3(-accumulatedNormal.x, 1.0, -accumulatedNormal.z)); //now the normal will point up.
+    vNormal = normalize(vec3(-accumulatedNormal.x, 1.0 - accumulatedNormal.y, -accumulatedNormal.z)); //now the normal will point up.
     vHeight = p.y;
     vPos = vec3(M * vec4(p, 1.0)); // Transform to world space for fragment lighting
     gl_Position = MVP * vec4(p, 1.0);

@@ -106,9 +106,13 @@ void main()
             //Its not as obvious rn
 
             float depthDist = length(u_cameraPos - vPos);
-            float fogFactor = exp(-depthDist * 0.1); // Play around for murkiness
-            vec3 murkyBlue = vec3(0.0, 0.1, 0.2);
-            finalColor = mix(murkyBlue, baseColor * 0.5, fogFactor);
+            float fogFactor = exp(-depthDist * 0.2); // Play around for murkiness
+            vec3 murkyAbyss = vec3(0.0, 0.05, 0.05);
+
+            vec3 underwaterSurface = mix(baseColor * 0.2, skyReflection * 0.5, fresnel); //surface reflectivity
+            finalColor = mix(murkyAbyss, underwaterSurface, fogFactor);
+
+            finalColor *= vec3(0.7, 1.3, 1.2); //green tint
         }
 
     } else {
