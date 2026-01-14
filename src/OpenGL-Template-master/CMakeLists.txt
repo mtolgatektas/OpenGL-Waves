@@ -59,6 +59,8 @@ add_executable(playground
 	playground/playground.h
 	playground/SimpleFragmentShader.fragmentshader
 	playground/SimpleVertexShader.vertexshader
+	playground/SkyBoxFragmentShader.fragmentshader
+	playground/SkyBoxVertexShader.vertexshader
 	common/shader.cpp
 	common/shader.hpp
 )

@@ -363,7 +363,7 @@ void updateAnimationLoop()
     
     drawSkybox(View, Projection); //We need to draw the sky before water.
     glBindVertexArray(VertexArrayID);//We need to bind the water vertex layout befor the sky renders. Without this line
-                                    //You only see the skybox.
+                                     //You only see the skybox.
 
     glUseProgram(programID);
 
@@ -499,7 +499,6 @@ bool initializeVertexbuffer()
 
 bool initializeWindow()
 {
-    // This is the magic line for skybox seams
     
     // Initialise GLFW
     if (!glfwInit())
