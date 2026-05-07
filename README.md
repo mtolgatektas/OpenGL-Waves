@@ -1,5 +1,5 @@
 # 🌊 Ocean Waves in OpenGL
-*"I just really like how water looks."*
+*I just really like how water looks.*
 
 This project is my personal dive into the world of real-time fluid simulation. It started with a simple goal: figure out how to make a flat grid of triangles look and move like the ocean. 
 
